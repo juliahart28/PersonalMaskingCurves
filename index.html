@@ -102,12 +102,22 @@
     </div>
 </div>
 
+Ah, I see exactly what happened! In the previous version, the bottom graph only plotted a point if the specific probe frequency you were testing in the Masker sweep perfectly matched a frequency you already measured in the Baseline. Because the baseline default was only 4 sparse points, the bottom graph was missing almost your entire curve and only dropping a single dot where the frequencies happened to align.
+
+To fix this and reveal the true shape of the masking curves, I made two changes:
+
+1. **Extended the Baseline Sweep:** The "No Masker" default list now spans comprehensively from **250 Hz to 8000 Hz**.
+2. **Logarithmic Interpolation:** I added a function that connects the dots of your baseline curve. Now, if you test a highly specific probe (like 850 Hz) during the masker sweep, the program will calculate exactly what your baseline threshold *would have been* at 850 Hz based on the surrounding data. This allows the bottom graph to subtract the baseline and draw the full, continuous masking curve regardless of whether the frequencies match perfectly.
+
+Replace your entire `<script>` block (from `<script>` down to `</script>`) with this updated version:
+
+```html
 <script>
 let audioCtx = null;
-let masterGain = null; // Anti-clipping master volume
-let activeProbeOsc = null; // Tracks probe to stop it early
-let activeMaskOsc = null; // Tracks masker to stop it early
-let playTimeout = null; // Tracks the 2-second play timer
+let masterGain = null; 
+let activeProbeOsc = null; 
+let activeMaskOsc = null; 
+let playTimeout = null; 
 
 let experimentData = { baseline: {}, maskers: { "500": {}, "1000": {}, "2000": {}, "4000": {} } };
 
@@ -143,17 +153,17 @@ document.getElementById('masker_freq').addEventListener('change', (e) => {
     } else if (val === "4000") {
         input.value = "2000, 3000, 3600, 3900, 4100, 4500, 5500, 8000";
     } else {
-        input.value = "500, 1000, 2000, 4000"; // Baseline mapping defaults
+        // Baseline mapping defaults updated to sweep from 250 to 8000 Hz
+        input.value = "250, 500, 750, 1000, 1500, 2000, 3000, 4000, 6000, 8000"; 
     }
 });
 
 // Start Sweep Logic
 document.getElementById('btn_start_trial').addEventListener('click', () => {
-    // 1. Safely initialize Audio and Master Gain
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.5; // -6dB of headroom to prevent harsh digital clipping
+        masterGain.gain.value = 0.5; 
         masterGain.connect(audioCtx.destination);
     }
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -161,7 +171,6 @@ document.getElementById('btn_start_trial').addEventListener('click', () => {
     sc_maskerFreq = document.getElementById('masker_freq').value;
     sc_maskerLvl = parseFloat(document.getElementById('s_masker_lvl').value);
     
-    // Parse the list AND filter out the masker frequency so they never overlap
     let freqInput = document.getElementById('probe_freqs').value;
     sc_freqList = freqInput.split(',')
         .map(n => parseFloat(n.trim()))
@@ -183,10 +192,9 @@ document.getElementById('btn_cancel').addEventListener('click', () => {
     try { if (activeProbeOsc) activeProbeOsc.stop(); } catch(e) {}
     try { if (activeMaskOsc) activeMaskOsc.stop(); } catch(e) {}
     endTrialEarly();
-    updatePlots(); // Plot whatever data was collected before cancelling
+    updatePlots(); 
 });
 
-// Load the next frequency in the array
 function loadNextFrequency() {
     if (sc_freqIndex >= sc_freqList.length) {
         alert("Sweep Complete! All frequencies mapped successfully.");
@@ -196,15 +204,12 @@ function loadNextFrequency() {
     }
 
     sc_probeFreq = sc_freqList[sc_freqIndex];
-    
-    // Reset Staircase variables for the new frequency run
     sc_currentProbeLvl = -20; 
     sc_stepSize = 5; 
     sc_reversals = 0;
     sc_reversalValues = [];
     sc_lastDirection = null;
 
-    // Update UI
     document.getElementById('lbl_active_probe').innerText = sc_probeFreq;
     document.getElementById('lbl_reversals').innerText = "0";
     document.getElementById('lbl_progress').innerText = `Frequency ${sc_freqIndex + 1} of ${sc_freqList.length}`;
@@ -213,9 +218,9 @@ function loadNextFrequency() {
     document.getElementById('btn_play_stimulus').disabled = false;
 }
 
-// Play Audio Logic (Restored)
+// Play Audio Logic
 document.getElementById('btn_play_stimulus').addEventListener('click', () => {
-    const duration = 2.0; // 2 Second Timer
+    const duration = 2.0; 
     const fade = 0.05;
 
     const probeOsc = audioCtx.createOscillator();
@@ -226,7 +231,6 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
     probeGain.gain.setValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + duration - fade);
     probeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
     
-    // Route to anti-clipping master gain
     probeOsc.connect(probeGain);
     probeGain.connect(masterGain); 
     probeOsc.start(audioCtx.currentTime);
@@ -243,7 +247,6 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
         maskGain.gain.setValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + duration - fade);
         maskGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
         
-        // Route to anti-clipping master gain
         maskOsc.connect(maskGain);
         maskGain.connect(masterGain); 
         maskOsc.start(audioCtx.currentTime);
@@ -269,12 +272,10 @@ document.getElementById('btn_yes').addEventListener('click', () => handleRespons
 document.getElementById('btn_no').addEventListener('click', () => handleResponse(false));
 
 function handleResponse(heard) {
-    // Instantly stop the audio!
     try { if (activeProbeOsc) activeProbeOsc.stop(); } catch(e) {}
     try { if (activeMaskOsc) activeMaskOsc.stop(); } catch(e) {}
     
     if (playTimeout) clearTimeout(playTimeout);
-    
     disableQuizButtons(true);
     
     document.getElementById('btn_play_stimulus').disabled = false;
@@ -307,23 +308,18 @@ function handleResponse(heard) {
 }
 
 function saveThresholdAndAdvance() {
-    // Average the last 4 reversal values
     let sum = 0;
     for(let i = 2; i < 6; i++) { sum += sc_reversalValues[i]; }
     let finalThreshold = sum / 4;
 
-    // Save to the correct data structure
     if (sc_maskerFreq === "none") {
         experimentData.baseline[sc_probeFreq] = finalThreshold;
     } else {
         experimentData.maskers[sc_maskerFreq][sc_probeFreq] = finalThreshold;
     }
 
-    // Increment index and load the next frequency automatically!
     sc_freqIndex++;
     loadNextFrequency();
-    
-    // Live update the plots so you can watch the curve build
     updatePlots();
 }
 
@@ -345,6 +341,27 @@ document.getElementById('btn_clear').addEventListener('click', () => {
 });
 
 function sortObjKeys(obj) { return Object.keys(obj).map(Number).sort((a, b) => a - b); }
+
+// Interpolates the baseline curve so the bottom graph can subtract the baseline 
+// even if the exact probe frequency wasn't mapped during the baseline sweep.
+function getInterpolatedBaseline(freq) {
+    let bKeys = sortObjKeys(experimentData.baseline);
+    if (bKeys.length === 0) return 0; 
+    if (experimentData.baseline[freq] !== undefined) return experimentData.baseline[freq];
+    
+    if (freq <= bKeys[0]) return experimentData.baseline[bKeys[0]];
+    if (freq >= bKeys[bKeys.length-1]) return experimentData.baseline[bKeys[bKeys.length-1]];
+    
+    for (let i = 0; i < bKeys.length - 1; i++) {
+        if (freq > bKeys[i] && freq < bKeys[i+1]) {
+            let f1 = bKeys[i], f2 = bKeys[i+1];
+            let v1 = experimentData.baseline[f1], v2 = experimentData.baseline[f2];
+            let fraction = (Math.log10(freq) - Math.log10(f1)) / (Math.log10(f2) - Math.log10(f1));
+            return v1 + fraction * (v2 - v1);
+        }
+    }
+    return 0;
+}
 
 function updatePlots() {
     let tracesAbs = [];
@@ -369,12 +386,16 @@ function updatePlots() {
     for (let mFreq in experimentData.maskers) {
         let xData = [], yData = [];
         let mKeys = sortObjKeys(experimentData.maskers[mFreq]);
+        
         mKeys.forEach(pFreq => {
-            if (experimentData.baseline[pFreq] !== undefined) {
+            // Only draw the masking curve if a baseline sweep exists to subtract against
+            if (bKeys.length > 0) {
                 xData.push(pFreq);
-                yData.push(experimentData.maskers[mFreq][pFreq] - experimentData.baseline[pFreq]);
+                let baselineVal = getInterpolatedBaseline(pFreq);
+                yData.push(experimentData.maskers[mFreq][pFreq] - baselineVal);
             }
         });
+        
         if (xData.length > 0) {
             tracesAmount.push({ x: xData, y: yData, mode: 'lines+markers', name: `${mFreq} Hz Masker`, line: {color: colors[mFreq]} });
         }
