@@ -104,6 +104,11 @@
 
 <script>
 let audioCtx = null;
+let masterGain = null; // Anti-clipping master volume
+let activeProbeOsc = null; // Tracks probe to stop it early
+let activeMaskOsc = null; // Tracks masker to stop it early
+let playTimeout = null; // Tracks the 2-second play timer
+
 let experimentData = { baseline: {}, maskers: { "500": {}, "1000": {}, "2000": {}, "4000": {} } };
 
 // Staircase State Machine Variables
@@ -113,15 +118,11 @@ let sc_freqList = [];
 let sc_freqIndex = 0;
 
 let sc_probeFreq = 1000;
-let sc_currentProbeLvl = -20; // Start loud
+let sc_currentProbeLvl = -20; 
 let sc_stepSize = 5; 
 let sc_reversals = 0;
 let sc_reversalValues = [];
 let sc_lastDirection = null; 
-
-let playTimeout = null;
-let activeProbeOsc = null;
-let activeMaskOsc = null;
 
 document.getElementById('s_masker_lvl').addEventListener('input', (e) => {
     document.getElementById('val_masker_lvl').innerText = e.target.value;
@@ -146,65 +147,6 @@ document.getElementById('masker_freq').addEventListener('change', (e) => {
     }
 });
 
-// Start Sweep Logic
-document.getElementById('btn_start_trial').addEventListener('click', () => {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-
-    sc_maskerFreq = document.getElementById('masker_freq').value;
-    sc_maskerLvl = parseFloat(document.getElementById('s_masker_lvl').value);
-    
-    // Parse the comma-separated list into an array of numbers
-    let freqInput = document.getElementById('probe_freqs').value;
-    sc_freqList = freqInput.split(',').map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
-    
-    if(sc_freqList.length === 0) {
-        alert("Please enter at least one valid probe frequency.");
-        return;
-    }
-
-    sc_freqIndex = 0;
-
-    // Switch UI
-    document.getElementById('setup_interface').style.display = 'none';
-    document.getElementById('quiz_interface').style.display = 'block';
-    
-    loadNextFrequency();
-});
-
-document.getElementById('btn_cancel').addEventListener('click', () => {
-    endTrialEarly();
-    updatePlots(); // Plot whatever data was collected before cancelling
-});
-
-// Load the next frequency in the array
-function loadNextFrequency() {
-    if (sc_freqIndex >= sc_freqList.length) {
-        alert("Sweep Complete! All frequencies mapped successfully.");
-        updatePlots();
-        endTrialEarly();
-        return;
-    }
-
-    sc_probeFreq = sc_freqList[sc_freqIndex];
-    
-    // Reset Staircase variables for the new frequency run
-    sc_currentProbeLvl = -20; 
-    sc_stepSize = 5; 
-    sc_reversals = 0;
-    sc_reversalValues = [];
-    sc_lastDirection = null;
-
-    // Update UI
-    document.getElementById('lbl_active_probe').innerText = sc_probeFreq;
-    document.getElementById('lbl_reversals').innerText = "0";
-    document.getElementById('lbl_progress').innerText = `Frequency ${sc_freqIndex + 1} of ${sc_freqList.length}`;
-    
-    disableQuizButtons(true);
-    document.getElementById('btn_play_stimulus').disabled = false;
-}
-
-// Play Audio Logic
 // Start Sweep Logic
 document.getElementById('btn_start_trial').addEventListener('click', () => {
     // 1. Safely initialize Audio and Master Gain
@@ -236,12 +178,98 @@ document.getElementById('btn_start_trial').addEventListener('click', () => {
     
     loadNextFrequency();
 });
+
+document.getElementById('btn_cancel').addEventListener('click', () => {
+    try { if (activeProbeOsc) activeProbeOsc.stop(); } catch(e) {}
+    try { if (activeMaskOsc) activeMaskOsc.stop(); } catch(e) {}
+    endTrialEarly();
+    updatePlots(); // Plot whatever data was collected before cancelling
+});
+
+// Load the next frequency in the array
+function loadNextFrequency() {
+    if (sc_freqIndex >= sc_freqList.length) {
+        alert("Sweep Complete! All frequencies mapped successfully.");
+        updatePlots();
+        endTrialEarly();
+        return;
+    }
+
+    sc_probeFreq = sc_freqList[sc_freqIndex];
+    
+    // Reset Staircase variables for the new frequency run
+    sc_currentProbeLvl = -20; 
+    sc_stepSize = 5; 
+    sc_reversals = 0;
+    sc_reversalValues = [];
+    sc_lastDirection = null;
+
+    // Update UI
+    document.getElementById('lbl_active_probe').innerText = sc_probeFreq;
+    document.getElementById('lbl_reversals').innerText = "0";
+    document.getElementById('lbl_progress').innerText = `Frequency ${sc_freqIndex + 1} of ${sc_freqList.length}`;
+    
+    disableQuizButtons(true);
+    document.getElementById('btn_play_stimulus').disabled = false;
+}
+
+// Play Audio Logic (Restored)
+document.getElementById('btn_play_stimulus').addEventListener('click', () => {
+    const duration = 2.0; // 2 Second Timer
+    const fade = 0.05;
+
+    const probeOsc = audioCtx.createOscillator();
+    const probeGain = audioCtx.createGain();
+    probeOsc.frequency.value = sc_probeFreq;
+    probeGain.gain.setValueAtTime(0, audioCtx.currentTime);
+    probeGain.gain.linearRampToValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + fade);
+    probeGain.gain.setValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + duration - fade);
+    probeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+    
+    // Route to anti-clipping master gain
+    probeOsc.connect(probeGain);
+    probeGain.connect(masterGain); 
+    probeOsc.start(audioCtx.currentTime);
+    probeOsc.stop(audioCtx.currentTime + duration);
+    activeProbeOsc = probeOsc;
+
+    if (sc_maskerFreq !== "none") {
+        const maskOsc = audioCtx.createOscillator();
+        const maskGain = audioCtx.createGain();
+        maskOsc.type = 'sine'; 
+        maskOsc.frequency.value = parseFloat(sc_maskerFreq);
+        maskGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        maskGain.gain.linearRampToValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + fade);
+        maskGain.gain.setValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + duration - fade);
+        maskGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+        
+        // Route to anti-clipping master gain
+        maskOsc.connect(maskGain);
+        maskGain.connect(masterGain); 
+        maskOsc.start(audioCtx.currentTime);
+        maskOsc.stop(audioCtx.currentTime + duration);
+        activeMaskOsc = maskOsc;
+    } else {
+        activeMaskOsc = null;
+    }
+
+    disableQuizButtons(false);
+    document.getElementById('btn_play_stimulus').disabled = true;
+    document.getElementById('btn_play_stimulus').innerText = "🔊 Playing...";
+    
+    if (playTimeout) clearTimeout(playTimeout);
+    playTimeout = setTimeout(() => { 
+        document.getElementById('btn_play_stimulus').disabled = false;
+        document.getElementById('btn_play_stimulus').innerText = "🔊 Play Audio Again";
+    }, duration * 1000);
+});
+
 // Staircase Logic (User Responses)
 document.getElementById('btn_yes').addEventListener('click', () => handleResponse(true));
 document.getElementById('btn_no').addEventListener('click', () => handleResponse(false));
 
 function handleResponse(heard) {
-    // Instantly stop the audio! (Wrapped in try/catch to prevent errors if the audio already finished naturally)
+    // Instantly stop the audio!
     try { if (activeProbeOsc) activeProbeOsc.stop(); } catch(e) {}
     try { if (activeMaskOsc) activeMaskOsc.stop(); } catch(e) {}
     
