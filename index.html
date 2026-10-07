@@ -187,55 +187,37 @@ function loadNextFrequency() {
 }
 
 // Play Audio Logic
-document.getElementById('btn_play_stimulus').addEventListener('click', () => {
-    const duration = 2.0;
-    const fade = 0.05;
+// Start Sweep Logic
+document.getElementById('btn_start_trial').addEventListener('click', () => {
+    // 1. Safely initialize Audio and Master Gain
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.5; // -6dB of headroom to prevent harsh digital clipping
+        masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
 
-    const probeOsc = audioCtx.createOscillator();
-    const probeGain = audioCtx.createGain();
-    probeOsc.frequency.value = sc_probeFreq;
-    probeGain.gain.setValueAtTime(0, audioCtx.currentTime);
-    probeGain.gain.linearRampToValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + fade);
-    probeGain.gain.setValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + duration - fade);
-    probeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
-    probeOsc.connect(probeGain);
-    probeGain.connect(audioCtx.destination);
-    probeOsc.start(audioCtx.currentTime);
-    probeOsc.stop(audioCtx.currentTime + duration);
+    sc_maskerFreq = document.getElementById('masker_freq').value;
+    sc_maskerLvl = parseFloat(document.getElementById('s_masker_lvl').value);
     
-    activeProbeOsc = probeOsc; // Track the probe
-
-    if (sc_maskerFreq !== "none") {
-        const maskOsc = audioCtx.createOscillator();
-        const maskGain = audioCtx.createGain();
-        maskOsc.type = 'sine'; 
-        maskOsc.frequency.value = parseFloat(sc_maskerFreq);
-        maskGain.gain.setValueAtTime(0, audioCtx.currentTime);
-        maskGain.gain.linearRampToValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + fade);
-        maskGain.gain.setValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + duration - fade);
-        maskGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
-        maskOsc.connect(maskGain);
-        maskGain.connect(audioCtx.destination);
-        maskOsc.start(audioCtx.currentTime);
-        maskOsc.stop(audioCtx.currentTime + duration);
-        
-        activeMaskOsc = maskOsc; // Track the masker
-    } else {
-        activeMaskOsc = null;
+    // Parse the list AND filter out the masker frequency so they never overlap
+    let freqInput = document.getElementById('probe_freqs').value;
+    sc_freqList = freqInput.split(',')
+        .map(n => parseFloat(n.trim()))
+        .filter(n => !isNaN(n) && (sc_maskerFreq === "none" || n !== parseFloat(sc_maskerFreq)));
+    
+    if(sc_freqList.length === 0) {
+        alert("Please enter valid probe frequencies (excluding the exact masker frequency).");
+        return;
     }
 
-    disableQuizButtons(false);
-    document.getElementById('btn_play_stimulus').disabled = true;
-    document.getElementById('btn_play_stimulus').innerText = "🔊 Playing...";
+    sc_freqIndex = 0;
+    document.getElementById('setup_interface').style.display = 'none';
+    document.getElementById('quiz_interface').style.display = 'block';
     
-    if (playTimeout) clearTimeout(playTimeout);
-    
-    playTimeout = setTimeout(() => { 
-        document.getElementById('btn_play_stimulus').disabled = false;
-        document.getElementById('btn_play_stimulus').innerText = "🔊 Play Audio Again";
-    }, duration * 1000);
+    loadNextFrequency();
 });
-
 // Staircase Logic (User Responses)
 document.getElementById('btn_yes').addEventListener('click', () => handleResponse(true));
 document.getElementById('btn_no').addEventListener('click', () => handleResponse(false));
