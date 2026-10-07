@@ -119,6 +119,8 @@ let sc_reversals = 0;
 let sc_reversalValues = [];
 let sc_lastDirection = null; 
 
+let playTimeout = null;
+
 document.getElementById('s_masker_lvl').addEventListener('input', (e) => {
     document.getElementById('val_masker_lvl').innerText = e.target.value;
 });
@@ -184,7 +186,7 @@ function loadNextFrequency() {
 
 // Play Audio Logic
 document.getElementById('btn_play_stimulus').addEventListener('click', () => {
-    const duration = 2.0; // Increased to 2 seconds
+    const duration = 2.0;
     const fade = 0.05;
 
     const probeOsc = audioCtx.createOscillator();
@@ -214,17 +216,19 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
         maskOsc.stop(audioCtx.currentTime + duration);
     }
 
-    // Disable the play button ONLY while the audio is actively playing
+    // 1. Immediately enable Yes/No buttons as soon as audio starts
+    disableQuizButtons(false);
+    
+    // 2. Disable play button and update text
     document.getElementById('btn_play_stimulus').disabled = true;
     document.getElementById('btn_play_stimulus').innerText = "🔊 Playing...";
     
-    setTimeout(() => { 
-        // Re-enable the play button so you can listen again
+    // 3. Clear any background timer before setting a new one
+    if (playTimeout) clearTimeout(playTimeout);
+    
+    playTimeout = setTimeout(() => { 
         document.getElementById('btn_play_stimulus').disabled = false;
         document.getElementById('btn_play_stimulus').innerText = "🔊 Play Audio Again";
-        
-        // Enable the Yes/No response buttons
-        disableQuizButtons(false); 
     }, duration * 1000);
 });
 
@@ -233,8 +237,14 @@ document.getElementById('btn_yes').addEventListener('click', () => handleRespons
 document.getElementById('btn_no').addEventListener('click', () => handleResponse(false));
 
 function handleResponse(heard) {
+    // 1. Cancel the background timer so it doesn't bleed into the next trial
+    if (playTimeout) clearTimeout(playTimeout);
+    
     disableQuizButtons(true);
+    
+    // 2. Reset the play button instantly for the next trial step
     document.getElementById('btn_play_stimulus').disabled = false;
+    document.getElementById('btn_play_stimulus').innerText = "🔊 Play Audio";
 
     let newDirection = heard ? 'down' : 'up';
 
