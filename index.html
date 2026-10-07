@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Psychoacoustic Frequency Masking Experiment</title>
+    <title>Psychoacoustic Frequency Masking (Staircase Method)</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f9; padding: 20px; color: #333; }
@@ -12,59 +12,73 @@
         .plot-area { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); flex: 2; min-width: 600px; }
         .slider-group { margin-bottom: 20px; }
         .slider-group label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px; }
-        input[type="range"] { width: 100%; }
-        select, input[type="number"] { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #2980b9; color: white; border: none; padding: 12px 15px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; font-size: 16px; }
-        button:hover { background: #1f6391; }
-        .btn-save { background: #27ae60; }
-        .btn-save:hover { background: #1e8449; }
+        select, input[type="number"], input[type="range"] { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+        button { color: white; border: none; padding: 12px 15px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; font-size: 16px; }
+        .btn-blue { background: #2980b9; } .btn-blue:hover { background: #1f6391; }
+        .btn-green { background: #27ae60; } .btn-green:hover { background: #1e8449; }
+        .btn-red { background: #e74c3c; } .btn-red:hover { background: #c0392b; }
         h2 { margin-top: 0; font-size: 1.3em; border-bottom: 2px solid #eee; padding-bottom: 10px; }
         .instructions { background: #eef2f5; padding: 15px; border-radius: 6px; font-size: 0.9em; margin-bottom: 20px; }
+        
+        /* Quiz Interface Styles */
+        #quiz_interface { display: none; background: #e8f4f8; padding: 20px; border-radius: 8px; border: 2px solid #2980b9; margin-top: 20px;}
+        .quiz-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        .stat-box { background: white; padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 10px; font-weight: bold;}
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="controls">
-        <h2>Experiment Controls</h2>
+        <h2>Adaptive Staircase Setup</h2>
         
-        <div class="instructions">
-            <strong>Step 1:</strong> Select "No Masker (Baseline)" and find your absolute threshold for various probe frequencies. Save each.<br>
-            <strong>Step 2:</strong> Select a Masker (e.g., 1000 Hz).<br>
-            <strong>Step 3:</strong> Play the tone. Adjust the Probe Level until you can *just* hear it over the masker.<br>
-            <strong>Step 4:</strong> Click "Save Threshold". Repeat for probes below, near, and above the masker.
+        <div class="instructions" id="setup_instructions">
+            <strong>1.</strong> Start by mapping your absolute hearing thresholds by leaving the Masker on "No Masker".<br>
+            <strong>2.</strong> Select a Probe Frequency to test.<br>
+            <strong>3.</strong> Click "Start Trial". The program will play audio and ask if you heard the probe. It will find your threshold automatically.
         </div>
 
-        <div class="slider-group">
-            <label>Masker Frequency (Hz)</label>
-            <select id="masker_freq">
-                <option value="none">No Masker (Baseline)</option>
-                <option value="500">500 Hz</option>
-                <option value="1000" selected>1000 Hz</option>
-                <option value="2000">2000 Hz</option>
-                <option value="4000">4000 Hz</option>
-            </select>
+        <div id="setup_interface">
+            <div class="slider-group">
+                <label>Masker Frequency (Hz)</label>
+                <select id="masker_freq">
+                    <option value="none">No Masker (Baseline)</option>
+                    <option value="500">500 Hz</option>
+                    <option value="1000" selected>1000 Hz</option>
+                    <option value="2000">2000 Hz</option>
+                    <option value="4000">4000 Hz</option>
+                </select>
+            </div>
+
+            <div class="slider-group">
+                <label>Masker Level (dBFS) <span id="val_masker_lvl">-40</span></label>
+                <input type="range" id="s_masker_lvl" min="-80" max="0" step="1" value="-40">
+            </div>
+
+            <div class="slider-group">
+                <label>Probe Frequency to Test (Hz)</label>
+                <input type="number" id="probe_freq" value="1000" step="50" min="100" max="10000">
+            </div>
+
+            <button id="btn_start_trial" class="btn-blue">Start Trial Run</button>
+            <button id="btn_clear" class="btn-red" style="margin-top: 30px;">Clear All Data</button>
         </div>
 
-        <div class="slider-group">
-            <label>Masker Level (dBFS) <span id="val_masker_lvl">-40</span></label>
-            <input type="range" id="s_masker_lvl" min="-80" max="0" step="1" value="-40">
+        <!-- ACTIVE QUIZ INTERFACE -->
+        <div id="quiz_interface">
+            <h3 style="margin-top: 0; text-align: center; color: #2980b9;">Trial in Progress</h3>
+            <div class="stat-box">Testing Probe: <span id="lbl_active_probe"></span> Hz</div>
+            <div class="stat-box" style="font-size: 0.85em; color: #666;">Reversals: <span id="lbl_reversals">0</span> / 6</div>
+            
+            <button id="btn_play_stimulus" class="btn-blue" style="padding: 20px; font-size: 1.2em;">🔊 Play Audio</button>
+            
+            <div style="text-align: center; margin-top: 15px; font-weight: bold;">Did you hear the probe tone?</div>
+            <div class="quiz-buttons">
+                <button id="btn_yes" class="btn-green" disabled>Yes</button>
+                <button id="btn_no" class="btn-red" disabled>No</button>
+            </div>
+            <button id="btn_cancel" class="btn-blue" style="background: #95a5a6; margin-top: 20px;">Cancel Trial</button>
         </div>
-
-        <div class="slider-group">
-            <label>Probe Frequency (Hz)</label>
-            <input type="number" id="probe_freq" value="1000" step="50" min="100" max="10000">
-            <small>Suggested testing around 1000Hz: 500, 700, 850, 950, 1000, 1050, 1200, 1500, 2000</small>
-        </div>
-
-        <div class="slider-group">
-            <label>Probe Level (dBFS) <span id="val_probe_lvl">-40</span></label>
-            <input type="range" id="s_probe_lvl" min="-100" max="0" step="1" value="-40">
-        </div>
-
-        <button id="btn_play">Play 1.5s Trial</button>
-        <button id="btn_save" class="btn-save">Save Threshold Measurement</button>
-        <button id="btn_clear" style="background: #e74c3c;">Clear All Data</button>
     </div>
 
     <div class="plot-area">
@@ -76,168 +90,202 @@
 
 <script>
 let audioCtx = null;
-let experimentData = {
-    baseline: {}, // { "1000": -75, "1200": -72, ... }
-    maskers: {
-        "500": {},
-        "1000": {},
-        "2000": {},
-        "4000": {}
-    }
-};
+let experimentData = { baseline: {}, maskers: { "500": {}, "1000": {}, "2000": {}, "4000": {} } };
 
-// UI Element Listeners
+// Staircase State Machine Variables
+let sc_maskerFreq = "none";
+let sc_maskerLvl = -40;
+let sc_probeFreq = 1000;
+let sc_currentProbeLvl = -20; // Start loud
+let sc_stepSize = 5; // Start with 5dB jumps
+let sc_reversals = 0;
+let sc_reversalValues = [];
+let sc_lastDirection = null; // 'down' (heard it) or 'up' (didn't hear it)
+
+// UI Setup Listeners
 document.getElementById('s_masker_lvl').addEventListener('input', (e) => {
     document.getElementById('val_masker_lvl').innerText = e.target.value;
 });
-document.getElementById('s_probe_lvl').addEventListener('input', (e) => {
-    document.getElementById('val_probe_lvl').innerText = e.target.value;
-});
 
-function dBToLinear(dB) {
-    return Math.pow(10, dB / 20);
-}
+function dBToLinear(dB) { return Math.pow(10, dB / 20); }
 
-document.getElementById('btn_play').addEventListener('click', () => {
+// Start Trial Logic
+document.getElementById('btn_start_trial').addEventListener('click', () => {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
-    const maskerFreq = document.getElementById('masker_freq').value;
-    const maskerLvl = parseFloat(document.getElementById('s_masker_lvl').value);
-    const probeFreq = parseFloat(document.getElementById('probe_freq').value);
-    const probeLvl = parseFloat(document.getElementById('s_probe_lvl').value);
+    sc_maskerFreq = document.getElementById('masker_freq').value;
+    sc_maskerLvl = parseFloat(document.getElementById('s_masker_lvl').value);
+    sc_probeFreq = parseFloat(document.getElementById('probe_freq').value);
     
-    const duration = 1.5;
-    const fade = 0.05; // 50ms fade to avoid clicks
+    // Reset Staircase variables for new run
+    sc_currentProbeLvl = -20; 
+    sc_stepSize = 5; 
+    sc_reversals = 0;
+    sc_reversalValues = [];
+    sc_lastDirection = null;
 
-    // Probe Setup
+    // Switch UI
+    document.getElementById('setup_interface').style.display = 'none';
+    document.getElementById('quiz_interface').style.display = 'block';
+    document.getElementById('lbl_active_probe').innerText = sc_probeFreq;
+    document.getElementById('lbl_reversals').innerText = "0";
+    disableQuizButtons(true);
+});
+
+document.getElementById('btn_cancel').addEventListener('click', endTrialEarly);
+
+// Play Audio Logic
+document.getElementById('btn_play_stimulus').addEventListener('click', () => {
+    const duration = 1.0;
+    const fade = 0.05;
+
+    // Play Probe
     const probeOsc = audioCtx.createOscillator();
     const probeGain = audioCtx.createGain();
-    probeOsc.frequency.value = probeFreq;
-    
+    probeOsc.frequency.value = sc_probeFreq;
     probeGain.gain.setValueAtTime(0, audioCtx.currentTime);
-    probeGain.gain.linearRampToValueAtTime(dBToLinear(probeLvl), audioCtx.currentTime + fade);
-    probeGain.gain.setValueAtTime(dBToLinear(probeLvl), audioCtx.currentTime + duration - fade);
+    probeGain.gain.linearRampToValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + fade);
+    probeGain.gain.setValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + duration - fade);
     probeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
-
     probeOsc.connect(probeGain);
     probeGain.connect(audioCtx.destination);
     probeOsc.start(audioCtx.currentTime);
     probeOsc.stop(audioCtx.currentTime + duration);
 
-    // Masker Setup (if not baseline)
-    if (maskerFreq !== "none") {
+    // Play Masker (if active)
+    if (sc_maskerFreq !== "none") {
         const maskOsc = audioCtx.createOscillator();
         const maskGain = audioCtx.createGain();
-        maskOsc.type = 'sine'; // Using narrow-band noise is technically better, but sine is simplest for demo
-        maskOsc.frequency.value = parseFloat(maskerFreq);
-
+        maskOsc.type = 'sine'; 
+        maskOsc.frequency.value = parseFloat(sc_maskerFreq);
         maskGain.gain.setValueAtTime(0, audioCtx.currentTime);
-        maskGain.gain.linearRampToValueAtTime(dBToLinear(maskerLvl), audioCtx.currentTime + fade);
-        maskGain.gain.setValueAtTime(dBToLinear(maskerLvl), audioCtx.currentTime + duration - fade);
+        maskGain.gain.linearRampToValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + fade);
+        maskGain.gain.setValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + duration - fade);
         maskGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
-
         maskOsc.connect(maskGain);
         maskGain.connect(audioCtx.destination);
         maskOsc.start(audioCtx.currentTime);
         maskOsc.stop(audioCtx.currentTime + duration);
     }
+
+    // Enable Yes/No buttons after audio plays
+    document.getElementById('btn_play_stimulus').disabled = true;
+    setTimeout(() => { disableQuizButtons(false); }, duration * 1000);
 });
 
-document.getElementById('btn_save').addEventListener('click', () => {
-    const maskerFreq = document.getElementById('masker_freq').value;
-    const probeFreq = parseFloat(document.getElementById('probe_freq').value);
-    const probeLvl = parseFloat(document.getElementById('s_probe_lvl').value);
+// Staircase Logic (User Responses)
+document.getElementById('btn_yes').addEventListener('click', () => handleResponse(true));
+document.getElementById('btn_no').addEventListener('click', () => handleResponse(false));
 
-    if (maskerFreq === "none") {
-        experimentData.baseline[probeFreq] = probeLvl;
-    } else {
-        experimentData.maskers[maskerFreq][probeFreq] = probeLvl;
+function handleResponse(heard) {
+    disableQuizButtons(true);
+    document.getElementById('btn_play_stimulus').disabled = false;
+
+    let newDirection = heard ? 'down' : 'up';
+
+    // Did a reversal occur? (e.g. they were saying "yes" and now said "no")
+    if (sc_lastDirection !== null && sc_lastDirection !== newDirection) {
+        sc_reversals++;
+        sc_reversalValues.push(sc_currentProbeLvl);
+        document.getElementById('lbl_reversals').innerText = sc_reversals;
+
+        // Shrink step size after 2 reversals for finer tuning
+        if (sc_reversals === 2) { sc_stepSize = 2; }
+        if (sc_reversals === 4) { sc_stepSize = 1; }
+
+        // End condition: 6 reversals
+        if (sc_reversals >= 6) {
+            calculateAndSaveThreshold();
+            return;
+        }
     }
-    updatePlots();
-});
 
+    sc_lastDirection = newDirection;
+
+    // Apply step for next trial
+    if (heard) {
+        sc_currentProbeLvl -= sc_stepSize; // Make it quieter
+    } else {
+        sc_currentProbeLvl += sc_stepSize; // Make it louder
+        if(sc_currentProbeLvl > 0) sc_currentProbeLvl = 0; // Ceiling
+    }
+}
+
+function calculateAndSaveThreshold() {
+    // Average the last 4 reversal values for a stable threshold
+    let sum = 0;
+    for(let i = 2; i < 6; i++) { sum += sc_reversalValues[i]; }
+    let finalThreshold = sum / 4;
+
+    if (sc_maskerFreq === "none") {
+        experimentData.baseline[sc_probeFreq] = finalThreshold;
+    } else {
+        experimentData.maskers[sc_maskerFreq][sc_probeFreq] = finalThreshold;
+    }
+
+    alert(`Trial Complete!\nCalculated Threshold: ${finalThreshold.toFixed(1)} dBFS`);
+    updatePlots();
+    endTrialEarly(); // Resets UI
+}
+
+function endTrialEarly() {
+    document.getElementById('quiz_interface').style.display = 'none';
+    document.getElementById('setup_interface').style.display = 'block';
+    document.getElementById('btn_play_stimulus').disabled = false;
+}
+
+function disableQuizButtons(disabled) {
+    document.getElementById('btn_yes').disabled = disabled;
+    document.getElementById('btn_no').disabled = disabled;
+}
+
+// --- PLOTTING LOGIC ---
 document.getElementById('btn_clear').addEventListener('click', () => {
     experimentData = { baseline: {}, maskers: { "500": {}, "1000": {}, "2000": {}, "4000": {} } };
     updatePlots();
 });
 
-function sortObjKeys(obj) {
-    return Object.keys(obj).map(Number).sort((a, b) => a - b);
-}
+function sortObjKeys(obj) { return Object.keys(obj).map(Number).sort((a, b) => a - b); }
 
 function updatePlots() {
-    // --- Plot 1: Absolute Thresholds (Raw dBFS) ---
     let tracesAbs = [];
-    
-    // Baseline Trace
     let bKeys = sortObjKeys(experimentData.baseline);
     if (bKeys.length > 0) {
-        tracesAbs.push({
-            x: bKeys,
-            y: bKeys.map(k => experimentData.baseline[k]),
-            mode: 'lines+markers',
-            name: 'Absolute Threshold (Baseline)',
-            line: {color: 'black', dash: 'dash'}
-        });
+        tracesAbs.push({ x: bKeys, y: bKeys.map(k => experimentData.baseline[k]), mode: 'lines+markers', name: 'Baseline (No Masker)', line: {color: 'black', dash: 'dash'} });
     }
 
-    // Masked Raw Traces
     const colors = {"500": "#e74c3c", "1000": "#2980b9", "2000": "#27ae60", "4000": "#8e44ad"};
     for (let mFreq in experimentData.maskers) {
         let mKeys = sortObjKeys(experimentData.maskers[mFreq]);
         if (mKeys.length > 0) {
-            tracesAbs.push({
-                x: mKeys,
-                y: mKeys.map(k => experimentData.maskers[mFreq][k]),
-                mode: 'lines+markers',
-                name: `Masked by ${mFreq} Hz`
-            });
+            tracesAbs.push({ x: mKeys, y: mKeys.map(k => experimentData.maskers[mFreq][k]), mode: 'lines+markers', name: `Masked by ${mFreq} Hz` });
         }
     }
 
     Plotly.react('plot_absolute', tracesAbs, {
-        title: 'Raw Threshold Measurements',
-        xaxis: { type: 'log', title: 'Probe Frequency (Hz)', range: [2, 4] },
-        yaxis: { title: 'Threshold (dBFS)', range: [-100, 0] },
-        margin: { l: 50, r: 20, t: 40, b: 40 }
+        title: 'Raw Threshold Measurements', xaxis: { type: 'log', title: 'Probe Frequency (Hz)', range: [2, 4] }, yaxis: { title: 'Threshold (dBFS)', range: [-100, 0] }, margin: { l: 50, r: 20, t: 40, b: 40 }
     });
 
-    // --- Plot 2: Masking Amount (Masked - Baseline) ---
     let tracesAmount = [];
     for (let mFreq in experimentData.maskers) {
-        let xData = [];
-        let yData = [];
+        let xData = [], yData = [];
         let mKeys = sortObjKeys(experimentData.maskers[mFreq]);
-        
         mKeys.forEach(pFreq => {
             if (experimentData.baseline[pFreq] !== undefined) {
                 xData.push(pFreq);
-                // Masking Amount = Threshold with Masker - Absolute Threshold
                 yData.push(experimentData.maskers[mFreq][pFreq] - experimentData.baseline[pFreq]);
             }
         });
-
         if (xData.length > 0) {
-            tracesAmount.push({
-                x: xData,
-                y: yData,
-                mode: 'lines+markers',
-                name: `${mFreq} Hz Masker`,
-                line: {color: colors[mFreq]}
-            });
+            tracesAmount.push({ x: xData, y: yData, mode: 'lines+markers', name: `${mFreq} Hz Masker`, line: {color: colors[mFreq]} });
         }
     }
 
     Plotly.react('plot_masking', tracesAmount, {
-        title: 'Masking Amount (Masked dBFS - Baseline dBFS)',
-        xaxis: { type: 'log', title: 'Probe Frequency (Hz)', range: [2, 4] },
-        yaxis: { title: 'Amount of Masking (dB)', rangemode: 'nonnegative' },
-        margin: { l: 50, r: 20, t: 40, b: 40 }
+        title: 'Masking Amount (Masked dBFS - Baseline dBFS)', xaxis: { type: 'log', title: 'Probe Frequency (Hz)', range: [2, 4] }, yaxis: { title: 'Amount of Masking (dB)', rangemode: 'nonnegative' }, margin: { l: 50, r: 20, t: 40, b: 40 }
     });
 }
-
-// Initial empty plots
 updatePlots();
 </script>
 
