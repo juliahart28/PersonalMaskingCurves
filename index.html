@@ -104,7 +104,6 @@
 
 <script>
 let audioCtx = null;
-let masterGain = null; 
 let experimentData = { baseline: {}, maskers: { "500": {}, "1000": {}, "2000": {}, "4000": {} } };
 
 // Staircase State Machine Variables
@@ -123,8 +122,6 @@ let sc_lastDirection = null;
 let playTimeout = null;
 let activeProbeOsc = null;
 let activeMaskOsc = null;
-
-
 
 document.getElementById('s_masker_lvl').addEventListener('input', (e) => {
     document.getElementById('val_masker_lvl').innerText = e.target.value;
@@ -191,15 +188,6 @@ function loadNextFrequency() {
 
 // Play Audio Logic
 document.getElementById('btn_play_stimulus').addEventListener('click', () => {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Create the master gain and lower the ceiling to prevent clipping
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.25; // -12dB Headroom
-        masterGain.connect(audioCtx.destination);
-    }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
     const duration = 2.0;
     const fade = 0.05;
 
@@ -211,7 +199,7 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
     probeGain.gain.setValueAtTime(dBToLinear(sc_currentProbeLvl), audioCtx.currentTime + duration - fade);
     probeGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
     probeOsc.connect(probeGain);
-    probeGain.connect(masterGain);
+    probeGain.connect(audioCtx.destination);
     probeOsc.start(audioCtx.currentTime);
     probeOsc.stop(audioCtx.currentTime + duration);
     
@@ -227,7 +215,7 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
         maskGain.gain.setValueAtTime(dBToLinear(sc_maskerLvl), audioCtx.currentTime + duration - fade);
         maskGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
         maskOsc.connect(maskGain);
-        maskGain.connect(masterGain);
+        maskGain.connect(audioCtx.destination);
         maskOsc.start(audioCtx.currentTime);
         maskOsc.stop(audioCtx.currentTime + duration);
         
