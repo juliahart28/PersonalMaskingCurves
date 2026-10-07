@@ -120,6 +120,8 @@ let sc_reversalValues = [];
 let sc_lastDirection = null; 
 
 let playTimeout = null;
+let activeProbeOsc = null;
+let activeMaskOsc = null;
 
 document.getElementById('s_masker_lvl').addEventListener('input', (e) => {
     document.getElementById('val_masker_lvl').innerText = e.target.value;
@@ -200,6 +202,8 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
     probeGain.connect(audioCtx.destination);
     probeOsc.start(audioCtx.currentTime);
     probeOsc.stop(audioCtx.currentTime + duration);
+    
+    activeProbeOsc = probeOsc; // Track the probe
 
     if (sc_maskerFreq !== "none") {
         const maskOsc = audioCtx.createOscillator();
@@ -214,16 +218,16 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
         maskGain.connect(audioCtx.destination);
         maskOsc.start(audioCtx.currentTime);
         maskOsc.stop(audioCtx.currentTime + duration);
+        
+        activeMaskOsc = maskOsc; // Track the masker
+    } else {
+        activeMaskOsc = null;
     }
 
-    // 1. Immediately enable Yes/No buttons as soon as audio starts
     disableQuizButtons(false);
-    
-    // 2. Disable play button and update text
     document.getElementById('btn_play_stimulus').disabled = true;
     document.getElementById('btn_play_stimulus').innerText = "🔊 Playing...";
     
-    // 3. Clear any background timer before setting a new one
     if (playTimeout) clearTimeout(playTimeout);
     
     playTimeout = setTimeout(() => { 
@@ -237,12 +241,14 @@ document.getElementById('btn_yes').addEventListener('click', () => handleRespons
 document.getElementById('btn_no').addEventListener('click', () => handleResponse(false));
 
 function handleResponse(heard) {
-    // 1. Cancel the background timer so it doesn't bleed into the next trial
+    // Instantly stop the audio! (Wrapped in try/catch to prevent errors if the audio already finished naturally)
+    try { if (activeProbeOsc) activeProbeOsc.stop(); } catch(e) {}
+    try { if (activeMaskOsc) activeMaskOsc.stop(); } catch(e) {}
+    
     if (playTimeout) clearTimeout(playTimeout);
     
     disableQuizButtons(true);
     
-    // 2. Reset the play button instantly for the next trial step
     document.getElementById('btn_play_stimulus').disabled = false;
     document.getElementById('btn_play_stimulus').innerText = "🔊 Play Audio";
 
