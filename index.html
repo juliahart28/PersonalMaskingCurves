@@ -24,6 +24,18 @@
         #quiz_interface { display: none; background: #e8f4f8; padding: 20px; border-radius: 8px; border: 2px solid #2980b9; margin-top: 20px;}
         .quiz-buttons { display: flex; gap: 10px; margin-top: 15px; }
         .stat-box { background: white; padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 10px; font-weight: bold;}
+
+        /* Button Click Feedback */
+        button:active:not(:disabled) {
+            filter: brightness(0.75);
+            transform: scale(0.97);
+        }
+        
+        /* Make disabled buttons look distinctly un-clickable */
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -172,7 +184,7 @@ function loadNextFrequency() {
 
 // Play Audio Logic
 document.getElementById('btn_play_stimulus').addEventListener('click', () => {
-    const duration = 1.0;
+    const duration = 2.0; // Increased to 2 seconds
     const fade = 0.05;
 
     const probeOsc = audioCtx.createOscillator();
@@ -202,8 +214,18 @@ document.getElementById('btn_play_stimulus').addEventListener('click', () => {
         maskOsc.stop(audioCtx.currentTime + duration);
     }
 
+    // Disable the play button ONLY while the audio is actively playing
     document.getElementById('btn_play_stimulus').disabled = true;
-    setTimeout(() => { disableQuizButtons(false); }, duration * 1000);
+    document.getElementById('btn_play_stimulus').innerText = "🔊 Playing...";
+    
+    setTimeout(() => { 
+        // Re-enable the play button so you can listen again
+        document.getElementById('btn_play_stimulus').disabled = false;
+        document.getElementById('btn_play_stimulus').innerText = "🔊 Play Audio Again";
+        
+        // Enable the Yes/No response buttons
+        disableQuizButtons(false); 
+    }, duration * 1000);
 });
 
 // Staircase Logic (User Responses)
