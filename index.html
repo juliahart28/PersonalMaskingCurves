@@ -101,17 +101,7 @@
         <div id="plot_masking" style="width:100%; height:350px;"></div>
     </div>
 </div>
-
-Ah, I see exactly what happened! In the previous version, the bottom graph only plotted a point if the specific probe frequency you were testing in the Masker sweep perfectly matched a frequency you already measured in the Baseline. Because the baseline default was only 4 sparse points, the bottom graph was missing almost your entire curve and only dropping a single dot where the frequencies happened to align.
-
-To fix this and reveal the true shape of the masking curves, I made two changes:
-
-1. **Extended the Baseline Sweep:** The "No Masker" default list now spans comprehensively from **250 Hz to 8000 Hz**.
-2. **Logarithmic Interpolation:** I added a function that connects the dots of your baseline curve. Now, if you test a highly specific probe (like 850 Hz) during the masker sweep, the program will calculate exactly what your baseline threshold *would have been* at 850 Hz based on the surrounding data. This allows the bottom graph to subtract the baseline and draw the full, continuous masking curve regardless of whether the frequencies match perfectly.
-
-Replace your entire `<script>` block (from `<script>` down to `</script>`) with this updated version:
-
-```html
+    
 <script>
 let audioCtx = null;
 let masterGain = null; 
